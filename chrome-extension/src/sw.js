@@ -73,10 +73,6 @@ const syncBookingAlarm = async () => {
 };
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason == chrome.runtime.OnInstalledReason.INSTALL) {
-    chrome.runtime.openOptionsPage();
-  }
-
   syncBookingAlarm();
 });
 
@@ -85,7 +81,7 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 chrome.action.onClicked.addListener(() => {
-  chrome.runtime.openOptionsPage();
+  focusOrOpenIrctc();
 });
 
 // function myFunction(details) {

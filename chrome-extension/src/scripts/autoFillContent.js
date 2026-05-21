@@ -1,5 +1,9 @@
 console.log("IRCTC Auto Booker content script loaded!");
 
+// Import OCR captcha solver
+// The auto-captcha-solver.js functions are available globally via webpack bundling
+// Functions available: autoSolveCaptchaBypass(), startCaptchaMonitoring()
+
 let passengers = [];
 let autofillController = null;
 
@@ -386,6 +390,32 @@ async function fillPassengers(mode, signal) {
                         captchaInput.click();
                         if (document.activeElement === captchaInput) {
                             console.log("Captcha input is now focused.");
+                            
+                            // Auto-solve captcha using OCR
+                            try {
+                                console.log("[OCR] Starting automatic captcha solving...");
+                                const captchaText = await autoSolveCaptchaBypass();
+                                if (captchaText && captchaText.trim()) {
+                                    console.log("[OCR] Filling captcha with:", captchaText);
+                                    // Simulate typing the captcha
+                                    for (const char of captchaText) {
+                                        captchaInput.value += char;
+                                        captchaInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                        await sleep(50 + Math.random() * 100);
+                                    }
+                                    // Trigger change event
+                                    captchaInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                    console.log("[OCR] Captcha filled successfully");
+                                    updateStatus('Captcha solved! Proceeding...');
+                                } else {
+                                    console.log("[OCR] Failed to extract captcha text");
+                                    updateStatus('OCR failed, please enter captcha manually');
+                                }
+                            } catch (ocrError) {
+                                console.error("[OCR] Error during auto-solve:", ocrError);
+                                updateStatus('Error during OCR, please enter captcha manually');
+                            }
+                            
                             break;
                         }
                     }

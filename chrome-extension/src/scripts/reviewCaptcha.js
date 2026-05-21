@@ -22,23 +22,33 @@ async function handleCaptchaAndContinue() {
 
   // Extract text from captcha image using OCR
   let captchaText = await extractTextFromImage(captchaImage.src);
-  Logger.info("Review Captcha text:",captchaText);
+  Logger.info("[OCR INFO] Review Captcha extracted text:", captchaText);
 
-  // Prompt the user to enter the captcha value
-  var trainHeader = document.querySelector(REVIEW_SELECTORS.REVIEW_TRAIN_HEADER);
-  var available = trainHeader.querySelector(REVIEW_SELECTORS.REVIEW_AVAILABLE);
-  var waitingList = trainHeader.querySelector(REVIEW_SELECTORS.REVIEW_WAITING);
-  var seatsAvailable = (available || waitingList)?.textContent;
-
-  var captchaValue = prompt(
-    'Current Seats Status: ' + seatsAvailable + '\nPlease enter the Captcha:',
-    captchaText // Pre-fill with OCR extracted text
-  );
-
-  // Fill the captcha input field with the provided value
-  if (captchaValue) {
-    await simulateTyping(captchaInput, captchaValue);
+  // Auto-fill captcha without showing prompt (fully automatic)
+  if (captchaText && captchaText.trim()) {
+    Logger.info("[OCR INFO] Auto-filling captcha without user prompt");
+    await simulateTyping(captchaInput, captchaText);
     await delay(50);
+  } else {
+    Logger.warn("[OCR INFO] Failed to extract captcha, showing prompt for manual entry");
+    // Fallback to manual entry if OCR fails
+    var trainHeader = document.querySelector(REVIEW_SELECTORS.REVIEW_TRAIN_HEADER);
+    var available = trainHeader.querySelector(REVIEW_SELECTORS.REVIEW_AVAILABLE);
+    var waitingList = trainHeader.querySelector(REVIEW_SELECTORS.REVIEW_WAITING);
+    var seatsAvailable = (available || waitingList)?.textContent;
+
+    var captchaValue = prompt(
+      'Current Seats Status: ' + seatsAvailable + '\nPlease enter the Captcha:',
+      ''
+    );
+
+    if (captchaValue) {
+      await simulateTyping(captchaInput, captchaValue);
+      await delay(50);
+    } else {
+      Logger.warn("[OCR INFO] User cancelled captcha prompt");
+      return;
+    }
   }
 
   // Find the "Continue" button
