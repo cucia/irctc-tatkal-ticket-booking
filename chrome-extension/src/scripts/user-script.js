@@ -1,9 +1,5 @@
 import Logger from './logger';
 import extractTextFromImage from './ocr-reader';
-import { autoSolveCaptchaBypass } from './auto-captcha-solver';
-
-// Make autoSolveCaptchaBypass globally available for autoFillContent.js
-window.autoSolveCaptchaBypass = autoSolveCaptchaBypass;
 
 let automationStatus = false;
 let username = '';
