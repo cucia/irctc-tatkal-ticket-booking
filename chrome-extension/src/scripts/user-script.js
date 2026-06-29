@@ -1205,6 +1205,10 @@ async function handleCaptchaAndContinue() {
       }
     }
   } else {
+    // Extract captcha text for pre-filling
+    let captchaText = await extractTextFromImage(captchaImage.src);
+    Logger.info("Review Captcha text:", captchaText);
+
     // Prompt the user to enter the captcha value
     var trainHeader = document.querySelector(REVIEW_TRAIN_HEADER);
     var available = trainHeader.querySelector(REVIEW_AVAILABLE);
@@ -1212,7 +1216,8 @@ async function handleCaptchaAndContinue() {
     var seatsAvailable = (available || waitingList)?.textContent;
 
     var captchaValue = prompt(
-      'Current Seats Status: ' + seatsAvailable + '\nPlease enter the Captcha:'
+      'Current Seats Status: ' + seatsAvailable + '\nPlease enter the Captcha:',
+      captchaText // Pre-fill with OCR extracted text
     );
 
     // Fill the captcha input field with the provided value

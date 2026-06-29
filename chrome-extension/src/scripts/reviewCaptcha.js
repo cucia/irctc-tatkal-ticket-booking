@@ -14,10 +14,12 @@ async function handleCaptchaAndContinue() {
     Logger.warn("Captcha image or input field not found!");
     return;
   }
+  Logger.info("Captcha image src:", captchaImage.src); // Debug: log image source
+  Logger.info("Captcha image tag:", captchaImage.outerHTML); // Debug: log entire img tag
 
   // Scroll the captcha input field into view smoothly
   await scrollToElement(captchaInput);
-  
+
   await delay(100);
 
   // Extract text from captcha image using OCR

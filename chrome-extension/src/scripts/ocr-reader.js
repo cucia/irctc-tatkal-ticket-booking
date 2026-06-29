@@ -30,12 +30,25 @@ export default async function extractTextFromImage(imageSrc) {
             body: formData
         });
 
+        if (!response.ok) {
+            throw new Error(`OCR API returned status ${response.status}: ${response.statusText}`);
+        }
+
         let result = await response.json();
         Logger.info("OCR API Response:", result);
 
-        if (result.ParsedResults && result.ParsedResults.length > 0) {
-            return result.ParsedResults[0].ParsedText.trim();
+        if (!result || !result.ParsedResults || result.ParsedResults.length === 0) {
+            Logger.warn("OCR API returned no parsed results");
+            return "";
         }
+
+        const parsedText = result.ParsedResults[0]?.ParsedText;
+        if (!parsedText) {
+            Logger.warn("OCR API parsed text is empty or undefined");
+            return "";
+        }
+
+        return parsedText.trim();
     } catch (error) {
         Logger.error("OCR API Error:", error.message);
     }
@@ -44,12 +57,23 @@ export default async function extractTextFromImage(imageSrc) {
 
 // Helper function: Convert image URL to Base64
 async function fetchBase64FromUrl(imageUrl) {
-    let response = await fetch(imageUrl);
-    let blob = await response.blob();
+    try {
+        let response = await fetch(imageUrl);
 
-    return new Promise((resolve) => {
-        let reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result); // Keep full Base64 format
-        reader.readAsDataURL(blob);
-    });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+        }
+
+        let blob = await response.blob();
+
+        return new Promise((resolve, reject) => {
+            let reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result); // Keep full Base64 format
+            reader.onerror = () => reject(new Error("FileReader failed to convert blob to Base64"));
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        Logger.error("Failed to fetch and convert image to Base64:", error.message);
+        throw error;
+    }
 }
