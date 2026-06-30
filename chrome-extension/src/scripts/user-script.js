@@ -1175,37 +1175,70 @@ async function handleCaptchaAndContinue() {
     return;
   }
 
-  // Scroll the captcha input field into view smoothly
   await scrollToElement(captchaInput);
-  
   await delay(100);
 
-  // Check if autoSolveCaptcha is enabled
-  if (autoSolveCaptcha) {
-    // Extract text from captcha image using OCR
-    let captchaText = await extractTextFromImage(captchaImage.src);
-    Logger.info("Review Captcha text:",captchaText);
+  // Retry logic: up to 5 attempts
+  let success = false;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const currentUri = captchaImage.src;
+    let captchaText = await extractTextFromImage(currentUri);
 
-    // Fill the captcha input field with the extracted value
-    await simulateTyping(captchaInput, captchaText);
-    await delay(50);
-
-    // Check if autoSubmitCaptcha is enabled
-    if (autoSubmitCaptcha) {
-      // Find the "Continue" button
-      var continueButton = document.querySelector(REVIEW_SUBMIT_BUTTON);
-
-      // Click the "Continue" button
-      if (continueButton) {
-        await humanClick(continueButton);
-      }
+    // Only skip if empty
+    if (!captchaText || captchaText.trim().length === 0) {
+      Logger.warn(`Attempt ${attempt}: Empty text`);
+      attempt < 5 && await delay(300);
+      continue;
     }
-  } else {
-    // Extract captcha text for pre-filling
-    let captchaText = await extractTextFromImage(captchaImage.src);
-    Logger.info("Review Captcha text:", captchaText);
 
-    // Prompt the user to enter the captcha value
+    // Clear input before filling
+    captchaInput.value = '';
+    captchaInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Fill captcha
+    captchaInput.value = captchaText;
+    captchaInput.dispatchEvent(new Event('input', { bubbles: true }));
+    captchaInput.dispatchEvent(new Event('change', { bubbles: true }));
+    captchaInput.dispatchEvent(new Event('blur', { bubbles: true }));
+    Logger.info(`Filled: ${captchaText}`);
+
+    // Submit
+    var continueButton = document.querySelector(REVIEW_SUBMIT_BUTTON);
+    if (continueButton) {
+      await continueButton.click();
+    }
+
+    // Check if captcha changed (new one loaded)
+    await delay(300);
+    const newImage = document.querySelector(REVIEW_CAPTCHA_IMAGE);
+
+    if (!newImage) {
+      Logger.info("Captcha success");
+      success = true;
+      break;
+    }
+
+    const newUri = newImage.src;
+
+    if (newUri !== currentUri) {
+      Logger.warn(`Attempt ${attempt}: New captcha loaded`);
+      captchaImage = newImage;
+      continue;
+    }
+
+    // Same URI - wait for page load
+    await delay(800);
+    if (!document.querySelector(REVIEW_CAPTCHA_IMAGE)) {
+      Logger.info("Captcha accepted");
+      success = true;
+      break;
+    }
+  }
+
+  if (!success) {
+    Logger.warn("Auto-solve failed, showing manual prompt");
+    let captchaText = await extractTextFromImage(captchaImage.src);
+
     var trainHeader = document.querySelector(REVIEW_TRAIN_HEADER);
     var available = trainHeader.querySelector(REVIEW_AVAILABLE);
     var waitingList = trainHeader.querySelector(REVIEW_WAITING);
@@ -1213,21 +1246,14 @@ async function handleCaptchaAndContinue() {
 
     var captchaValue = prompt(
       'Current Seats Status: ' + seatsAvailable + '\nPlease enter the Captcha:',
-      captchaText // Pre-fill with OCR extracted text
+      captchaText
     );
 
-    // Fill the captcha input field with the provided value
     if (captchaValue) {
       await simulateTyping(captchaInput, captchaValue);
       await delay(50);
-
-    // Find the "Continue" button
-    var continueButton = document.querySelector(REVIEW_SUBMIT_BUTTON);
-
-      // Click the "Continue" button
-      if (continueButton) {
-        await humanClick(continueButton);
-      }
+      var btn = document.querySelector(REVIEW_SUBMIT_BUTTON);
+      if (btn) await btn.click();
     }
   }
 }

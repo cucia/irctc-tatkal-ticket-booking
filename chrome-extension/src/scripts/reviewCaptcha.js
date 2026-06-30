@@ -4,64 +4,99 @@ import { scrollToElement } from './elementUtils';
 import extractTextFromImage from './ocr-reader';
 import Logger from './logger';
 
-async function handleCaptchaAndContinue() {
-  await waitForElementToAppear(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE);
-  // Find the captcha input element and image
-  var captchaInput = document.getElementById(REVIEW_SELECTORS.REVIEW_CAPTCHA_INPUT);
-  var captchaImage = document.querySelector(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE);
+async function handleCaptchaWithRetry(maxAttempts = 5) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const captchaImage = document.querySelector(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE);
+    if (!captchaImage) break;
 
-  if (!captchaImage || !captchaInput) {
-    Logger.warn("Captcha image or input field not found!");
-    return;
-  }
-  Logger.info("Captcha image src:", captchaImage.src); // Debug: log image source
-  Logger.info("Captcha image tag:", captchaImage.outerHTML); // Debug: log entire img tag
+    const currentUri = captchaImage.src;
+    let captchaText = await extractTextFromImage(currentUri);
 
-  // Scroll the captcha input field into view smoothly
-  await scrollToElement(captchaInput);
+    // Validate: 4-6 alphanumeric chars
+    if (!captchaText || !/^[a-zA-Z0-9]{4,6}$/.test(captchaText)) {
+      Logger.warn(`Attempt ${attempt}: Invalid format`);
+      attempt < maxAttempts && await delay(300);
+      continue;
+    }
 
-  await delay(100);
+    // Clear input before filling
+    const input = document.getElementById(REVIEW_SELECTORS.REVIEW_CAPTCHA_INPUT);
+    if (input) {
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
 
-  // Extract text from captcha image using OCR
-  let captchaText = await extractTextFromImage(captchaImage.src);
-  Logger.info("[OCR INFO] Review Captcha extracted text:", captchaText);
+    // Fill and submit
+    if (input) {
+      input.value = captchaText;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('blur', { bubbles: true }));
+      Logger.info(`Filled: ${captchaText}`);
+    }
 
-  // Auto-fill captcha without showing prompt (fully automatic)
-  if (captchaText && captchaText.trim()) {
-    Logger.info("[OCR INFO] Auto-filling captcha without user prompt");
-    await simulateTyping(captchaInput, captchaText);
-    await delay(50);
-  } else {
-    Logger.warn("[OCR INFO] Failed to extract captcha, showing prompt for manual entry");
-    // Fallback to manual entry if OCR fails
-    var trainHeader = document.querySelector(REVIEW_SELECTORS.REVIEW_TRAIN_HEADER);
-    var available = trainHeader.querySelector(REVIEW_SELECTORS.REVIEW_AVAILABLE);
-    var waitingList = trainHeader.querySelector(REVIEW_SELECTORS.REVIEW_WAITING);
-    var seatsAvailable = (available || waitingList)?.textContent;
+    const button = document.querySelector(REVIEW_SELECTORS.REVIEW_SUBMIT_BUTTON);
+    if (button) {
+      await button.click();
+    }
 
-    var captchaValue = prompt(
-      'Current Seats Status: ' + seatsAvailable + '\nPlease enter the Captcha:',
-      ''
-    );
+    // Check if captcha changed
+    await delay(300);
+    const newImage = document.querySelector(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE);
 
-    if (captchaValue) {
-      await simulateTyping(captchaInput, captchaValue);
-      await delay(50);
-    } else {
-      Logger.warn("[OCR INFO] User cancelled captcha prompt");
-      return;
+    if (!newImage) {
+      Logger.info("Captcha success");
+      return true;
+    }
+
+    const newUri = newImage.src;
+
+    if (newUri !== currentUri) {
+      Logger.warn(`Attempt ${attempt}: New captcha loaded`);
+      continue;
+    }
+
+    // Same URI - wait for page load
+    await delay(800);
+    if (!document.querySelector(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE)) {
+      Logger.info("Captcha accepted");
+      return true;
     }
   }
 
-  // Find the "Continue" button
-  var continueButton = document.querySelector(REVIEW_SELECTORS.REVIEW_SUBMIT_BUTTON);
+  Logger.error("Captcha failed after 5 attempts");
+  return false;
+}
 
-  // Click the "Continue" button
-  if (continueButton) {
-    await continueButton.click();
+async function handleCaptchaAndContinue() {
+  await waitForElementToAppear(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE);
+
+  const input = document.getElementById(REVIEW_SELECTORS.REVIEW_CAPTCHA_INPUT);
+  const image = document.querySelector(REVIEW_SELECTORS.REVIEW_CAPTCHA_IMAGE);
+
+  if (!image || !input) {
+    Logger.warn("Captcha elements not found");
+    return;
+  }
+
+  await scrollToElement(input);
+  await delay(100);
+
+  const success = await handleCaptchaWithRetry(5);
+
+  if (!success) {
+    const header = document.querySelector(REVIEW_SELECTORS.REVIEW_TRAIN_HEADER);
+    const available = header?.querySelector(REVIEW_SELECTORS.REVIEW_AVAILABLE);
+    const waiting = header?.querySelector(REVIEW_SELECTORS.REVIEW_WAITING);
+    const seats = (available || waiting)?.textContent;
+
+    const value = prompt(`Current Seats: ${seats}\nEnter Captcha:`, "");
+    if (value) {
+      await simulateTyping(input, value);
+      await delay(50);
+      document.querySelector(REVIEW_SELECTORS.REVIEW_SUBMIT_BUTTON)?.click();
+    }
   }
 }
 
-export {
-    handleCaptchaAndContinue
-};
+export { handleCaptchaAndContinue };
